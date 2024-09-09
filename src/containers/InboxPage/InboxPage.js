@@ -204,7 +204,7 @@ export const InboxPageComponent = props => {
   const { tab } = params;
   const validTab = tab === 'orders' || tab === 'sales';
   if (!validTab) {
-    return <NotFoundPage />;
+    return <NotFoundPage staticContext={props.staticContext} />;
   }
 
   const isOrders = tab === 'orders';
@@ -345,7 +345,6 @@ export const InboxPageComponent = props => {
 
 InboxPageComponent.defaultProps = {
   currentUser: null,
-  currentUserHasOrders: null,
   fetchOrdersOrSalesError: null,
   pagination: null,
   providerNotificationCount: 0,

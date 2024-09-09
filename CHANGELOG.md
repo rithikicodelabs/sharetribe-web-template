@@ -14,8 +14,168 @@ way to update this template, but currently, we follow a pattern:
 
 ## Upcoming version 2024-XX-XX
 
+- [fix] Currencies that the Stripe does not support should not cause 500 errors.
+  [#447](https://github.com/sharetribe/web-template/pull/447)
+
+## [v5.5.0] 2024-09-03
+
+- [add] Add currently available translations for DE, ES, FR.
+  [#445](https://github.com/sharetribe/web-template/pull/445)
+- [change] Make the propType blockId optional for all Block types.
+  [#444](https://github.com/sharetribe/web-template/pull/444)
+- [change] Update Sentry (v6.19.7 -> v8.26.0). Add ignoreErrors setup, add CSP directives and avoid
+  some errors. [#441](https://github.com/sharetribe/web-template/pull/441)
+- [fix] ListingPage: the optional chaining for processType variable was faulty.
+  [#443](https://github.com/sharetribe/web-template/pull/443)
+- [change] Updates to the configuration script. Marketplace name is now prompted in the mandatory
+  settings. [#440](https://github.com/sharetribe/web-template/pull/440)
+- [change] Update one copy text. [#439](https://github.com/sharetribe/web-template/pull/439)
+
+  [v5.5.0]: https://github.com/sharetribe/web-template/compare/v5.4.0...v5.5.0
+
+## [v5.4.0] 2024-08-20
+
+- [change] auth.duck.js: login flow should wait for currentUser entity be loaded.
+  [#436](https://github.com/sharetribe/web-template/pull/436)
+- [add] Access control: private marketplace mode
+
+  - Fetch a new asset: /general/access-control.json to check private: true/false flag
+  - Make SearchPage, ListingPage, ProfilePage, Styleguide require authentication
+  - Ensure currentUser entity is loaded before loadData on client-side
+  - Restrict data load & add redirections for SearchPage, ListingPage, and ProfilePage
+
+  [#434](https://github.com/sharetribe/web-template/pull/434)
+
+- [add] Access control: 'pending-approval' state for users.
+
+  - Users will get "state", which is exposed through currentUser's attribute
+  - A new state is "pending-approval", which restricts user from initiating transactions and posting
+    listings.
+  - In addition, 'banned' users will also have state 'banned'.
+  - Extra: Routes.js: do not allow banned users to auth pages
+  - [fix]: InboxPage.duck.js: include deleted and banned attributes
+  - [fix]: ModalMissingInformation: only 'active' users get this modal shown
+  - [fix]: Inquiry modal: open the modal after authentication
+  - Some util-file imports have been reordered (might cause conflicts)
+
+  [#428](https://github.com/sharetribe/web-template/pull/428)
+
+- [fix] SearchPage: SearchFiltersMobile (modal) should be above topbar.
+  [#432](https://github.com/sharetribe/web-template/pull/432)
+
+  [v5.4.0]: https://github.com/sharetribe/web-template/compare/v5.3.0...v5.4.0
+
+## [v5.3.0] 2024-08-13
+
+- [change] ProfilePage: redirect Stripe's crawler to landing page (profile page might be empty).
+  [#430](https://github.com/sharetribe/web-template/pull/430)
+- [add] Add currently available translations for DE, ES, FR.
+  [#429](https://github.com/sharetribe/web-template/pull/429)
+- [add] Handle API's new permission model & permission to post listings
+
+  - CurrentUser fetch includes a new relationship: effectivePermissionSet
+  - There is a new Page component: NoAccessPage
+  - If user has no posting rights: they can't create or edit a draft listing and they can't open a
+    previously closed published listing. Instead, they are redirected to NoAccessPage
+
+  [#426](https://github.com/sharetribe/web-template/pull/426)
+
+- [fix] Routes.js: reTry can be undefined in some cases (reTry.scrollIntoView)
+  [#427](https://github.com/sharetribe/web-template/pull/427)
+- [change] ProfilePage: remove withViewport and refactor a bit.
+  [#424](https://github.com/sharetribe/web-template/pull/424)
+- [change] Update express.js (v4.19.2) and nodemon (3.1.4).
+  [#421](https://github.com/sharetribe/web-template/pull/421)
+- [add] richText.js: support parentheses on autolinked URLs.
+  [#419](https://github.com/sharetribe/web-template/pull/419)
+- [fix] Safari has a bug related to reading array directly from JSON-LD script tag.
+  [#418](https://github.com/sharetribe/web-template/pull/418)
+- [fix] There could be rare time-windows when indexing has not caught up with deleted & closed
+  listings. This might result those listings to be included to listing queries.
+  [#417](https://github.com/sharetribe/web-template/pull/417)
+
+  [v5.3.0]: https://github.com/sharetribe/web-template/compare/v5.2.1...v5.3.0
+
+## [v5.2.1] 2024-07-02
+
+- [fix] fix: calculateShippingFee (when shippingPriceInSubunitsAdditionalItems is 0, no shipping fee
+  was included) [#414](https://github.com/sharetribe/web-template/pull/414)
+- [fix] Remove stock from schema if there's no stock in use.
+  [#405](https://github.com/sharetribe/web-template/pull/405)
+- [fix] Remove left-behind slash from inquiry-new-inquiry email template reference.
+  [#406](https://github.com/sharetribe/web-template/pull/406)
+- [fix] The subject line of purchase-new-order email had a wrong variable name.
+  [#413](https://github.com/sharetribe/web-template/pull/413)
+- [change] Fix another typo in FR translations.
+  [#409](https://github.com/sharetribe/web-template/pull/409)
+- [change] Fix a typo in FR translations.
+  [#408](https://github.com/sharetribe/web-template/pull/408)
+- [add] Add currently available translations for de, es, fr.
+  [#404](https://github.com/sharetribe/web-template/pull/404)
+- [fix] The example files of SignupForm and ConfirmSignupForm had wrong data.
+  [#403](https://github.com/sharetribe/web-template/pull/403)
+- [change] FilterComponent: relax generated name-attribute for inputs: allow camelCase.
+  [#402](https://github.com/sharetribe/web-template/pull/402)
+
+  [v5.2.1]: https://github.com/sharetribe/web-template/compare/v5.2.0...v5.2.1
+
+## [v5.2.0] 2024-05-28
+
+- [add] add currently available translations for de, es, fr.
+  [#400](https://github.com/sharetribe/web-template/pull/400)
+- [add] This adds user types. User fields can be tied to user types
+
+  - User fields contain multiple default user fields
+    - Only displayName and phoneNumber can be toggle on/off
+      - You can also toggle wether those are shown on sign up forms.
+  - Custom user fields can be tied to user types.
+  - AuthenticationPage: SignupForm and ConfirmSignupForm show a dropdown to select user type if it's
+    not preselected
+    - Default
+  - New route **_SignupForUserTypePage_** with path `/signup/:userType`
+    - This route preselects one user type for the sign up forms.
+    - If preselected userType is there (`/signup/:userType`), then
+      - Dropdown selector is not shown.
+      - Toggling between login & signup tabs should keep the userType in memory
+      - Using SSO, saves the preselected user type to a temporary cookie (to be used in
+        ConfirmSignupForm after returning from ID provider's website)
+    - An unknown (e.g. outdated) userType in the route will show 404 page.
+
+  [#399](https://github.com/sharetribe/web-template/pull/399)
+
+- [add] Toggle the visibility of unselected options on SectionMultiEnumMaybe through hosted assets.
+  [#382](https://github.com/sharetribe/web-template/pull/382)
+- [fix] Update SDK to v1.21.1. Fixes bug with extended data with a key `length` and a number type
+  value. [#398](https://github.com/sharetribe/web-template/pull/398)
+- [fix] util/sanitize.js: handle publicData = null case which happens with banned user
+  [#397](https://github.com/sharetribe/web-template/pull/397)
+- [fix] en.json: typo on 'ModalMissingInformation.verifyEmailText'
+  [#396](https://github.com/sharetribe/web-template/pull/396)
+- [fix] Ensure that there is listingType, transactionProcessAlias and unitType defined.
+  [#394](https://github.com/sharetribe/web-template/pull/394)
+- [fix] en.json: typo on 'StripeConnectAccountForm.stripeToSText'
+  [#395](https://github.com/sharetribe/web-template/pull/395)
+- [change] StripeConnectAccount: use 'collectionOptions' instead of deprecated 'collect'. The
+  future_requirements uses 'include' by default.
+  [#392](https://github.com/sharetribe/web-template/pull/392)
+- [fix] mergeDefaultTypesAndFieldsForDebugging was set to true, which is wrong. The 0 handling with
+  min and max was wrong. [#393](https://github.com/sharetribe/web-template/pull/393)
+
+  [v5.2.0]: https://github.com/sharetribe/web-template/compare/v5.1.0...v5.2.0
+
+## [v5.1.0] 2024-05-21
+
 - [add] support for extended data fields with type `long`
   [#364](https://github.com/sharetribe/web-template/pull/364)
+- [change] the login-as feature has changed:
+
+  - Use `sdk.loginAs` instead of `sdk.login`, which is deprecated for this purpose
+  - Use `authInfo.isLoggedInAs` instead of relying on auth token's `scope` to determine if current
+    session is operator user logged in as marketplace user.
+  - Note: when taking update from upstream, check also commit be7e2b9b4.
+
+  [#386](https://github.com/sharetribe/web-template/pull/386)
+
 - [fix] the email template for default-purchase process
   (purchase-order-canceled-from-disputed-provider-html.html) contained copy-paste related typo.
   [#390](https://github.com/sharetribe/web-template/pull/389)
@@ -44,11 +204,8 @@ way to update this template, but currently, we follow a pattern:
 - [fix] Styleguide shows multiple versions of some components. The 'id' attributes need to be
   unique. [#380](https://github.com/sharetribe/web-template/pull/380)
 - [change] Update SDK to v1.21.0 [#386](https://github.com/sharetribe/web-template/pull/386)
-- [change] Use `authInfo.isLoggedInAs` instead of relying on auth token's
-  `scope` to determine if current session is operator user logged in as
-  marketplace user [#386](https://github.com/sharetribe/web-template/pull/386)
-- [change] For login as, use `sdk.loginAs` instead of `sdk.login`, which is
-  deprecated for this purpose [#386](https://github.com/sharetribe/web-template/pull/386)
+
+  [v5.1.0]: https://github.com/sharetribe/web-template/compare/v5.0.1...v5.1.0
 
 ## [v5.0.1] 2024-04-30
 
