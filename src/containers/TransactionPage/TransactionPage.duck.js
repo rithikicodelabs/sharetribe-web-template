@@ -332,15 +332,14 @@ export const fetchTimeSlots = (listingId, start, end, timeZone) => (dispatch, ge
 // Helper function for loadData call.
 const fetchMonthlyTimeSlots = (dispatch, listing) => {
   const hasWindow = typeof window !== 'undefined';
-  const attributes = listing.attributes;
-  // Listing could be ownListing entity too, so we just check if attributes key exists
-  const hasTimeZone =
-    attributes && attributes.availabilityPlan && attributes.availabilityPlan.timezone;
+  const { availabilityPlan, publicData } = listing?.attributes || {};
+  const tz = availabilityPlan?.timezone;
 
   // Fetch time-zones on client side only.
-  if (hasWindow && listing.id && hasTimeZone) {
-    const tz = listing.attributes.availabilityPlan.timezone;
-    const nextBoundary = findNextBoundary(new Date(), 'hour', tz);
+  if (hasWindow && listing.id && !!tz) {
+    const unitType = publicData?.unitType;
+    const timeUnit = unitType === 'hour' ? 'hour' : 'day';
+    const nextBoundary = findNextBoundary(new Date(), timeUnit, tz);
 
     const nextMonth = getStartOf(nextBoundary, 'month', tz, 1, 'months');
     const nextAfterNextMonth = getStartOf(nextMonth, 'month', tz, 1, 'months');
@@ -378,9 +377,56 @@ const listingRelationship = txResponse => {
   return txResponse.data.data.relationships.listing.data;
 };
 
+/**
+ * Injects a transaction's included provider relationship as the included
+ * listing's author relationship.
+ * @param {*} txResponse A SDK response from transactions.show().
+ * @returns a copy of the txResponse parameter with a listing.author
+ * relationship added, if provider exists in the transaction's relationships.
+ */
+const injectAuthorRelationship = txResponse => {
+  const {
+    included,
+    data: {
+      relationships: { provider },
+    },
+  } = txResponse.data;
+
+  // If provider has not been included, return the response with no changes.
+  if (!provider?.data?.id) {
+    return txResponse;
+  }
+
+  const includedListingIdx = included.findIndex(inc => inc.type === 'listing');
+
+  // We will set the transaction's provider as the listing's author.
+  // The full user resource we want to associate with the listing is
+  // already available in the response.data.included array, so we only
+  // need to add a relationship reference in the included listing resource.
+  included[includedListingIdx] = {
+    ...included[includedListingIdx],
+    relationships: {
+      ...included[includedListingIdx].relationships,
+      author: {
+        data: {
+          id: provider?.data?.id,
+          type: 'user',
+        },
+      },
+    },
+  };
+
+  return {
+    ...txResponse,
+    data: {
+      ...txResponse.data,
+      included: [...included],
+    },
+  };
+};
+
 export const fetchTransaction = (id, txRole, config) => (dispatch, getState, sdk) => {
   dispatch(fetchTransactionRequest());
-  let txResponse = null;
 
   return sdk.transactions
     .show(
@@ -393,6 +439,7 @@ export const fetchTransaction = (id, txRole, config) => (dispatch, getState, sdk
           'provider.profileImage',
           'listing',
           'listing.currentStock',
+          'listing.images',
           'booking',
           'reviews',
           'reviews.author',
@@ -403,7 +450,6 @@ export const fetchTransaction = (id, txRole, config) => (dispatch, getState, sdk
       { expand: true }
     )
     .then(response => {
-      txResponse = response;
       const listingId = listingRelationship(response).id;
       const entities = updatedEntities({}, response.data);
       const listingRef = { id: listingId, type: 'listing' };
@@ -412,6 +458,7 @@ export const fetchTransaction = (id, txRole, config) => (dispatch, getState, sdk
       const listing = denormalised[0];
       const transaction = denormalised[1];
       const processName = resolveLatestProcessName(transaction.attributes.processName);
+
       try {
         const process = getProcess(processName);
         const isInquiry = process.getState(transaction) === process.states.INQUIRY;
@@ -427,24 +474,16 @@ export const fetchTransaction = (id, txRole, config) => (dispatch, getState, sdk
         console.log(`transaction process (${processName}) was not recognized`);
       }
 
-      const canFetchListing = listing && listing.attributes && !listing.attributes.deleted;
-      if (canFetchListing) {
-        return sdk.listings.show({
-          id: listingId,
-          include: ['author', 'author.profileImage', 'images'],
-          ...getImageVariants(config.layout.listingImage),
-        });
-      } else {
-        return response;
-      }
+      // API does not allow fetching transaction.listing.author, so we will
+      // set the relationship manually based on the transaction's provider.
+      return injectAuthorRelationship(response);
     })
     .then(response => {
       const listingFields = config?.listing?.listingFields;
       const sanitizeConfig = { listingFields };
 
-      dispatch(addMarketplaceEntities(txResponse, sanitizeConfig));
       dispatch(addMarketplaceEntities(response, sanitizeConfig));
-      dispatch(fetchTransactionSuccess(txResponse));
+      dispatch(fetchTransactionSuccess(response));
       return response;
     })
     .catch(e => {
