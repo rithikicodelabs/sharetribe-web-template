@@ -36,6 +36,7 @@ import * as FieldSelectTree from './components/FieldSelectTree/FieldSelectTree.e
 import * as FieldTextInput from './components/FieldTextInput/FieldTextInput.example';
 import * as IconAdd from './components/IconAdd/IconAdd.example';
 import * as IconAlert from './components/IconAlert/IconAlert.example';
+import * as IconArrowHead from './components/IconArrowHead/IconArrowHead.example';
 import * as IconBannedUser from './components/IconBannedUser/IconBannedUser.example';
 import * as IconCheckmark from './components/IconCheckmark/IconCheckmark.example';
 import * as IconClose from './components/IconClose/IconClose.example';
@@ -56,6 +57,7 @@ import * as IconSocialMediaInstagram from './components/IconSocialMediaInstagram
 import * as IconSocialMediaTwitter from './components/IconSocialMediaTwitter/IconSocialMediaTwitter.example';
 import * as IconSpinner from './components/IconSpinner/IconSpinner.example';
 import * as IconSuccess from './components/IconSuccess/IconSuccess.example';
+import * as IconSynchronize from './components/IconSynchronize/IconSynchronize.example';
 import * as Logo from './components/Logo/Logo.example';
 import * as LinkedLogo from './components/Logo/LinkedLogo.example';
 import * as ListingCard from './components/ListingCard/ListingCard.example';
@@ -68,6 +70,7 @@ import * as NamedLink from './components/NamedLink/NamedLink.example';
 import * as OrderBreakdown from './components/OrderBreakdown/OrderBreakdown.example';
 import * as BookingDatesForm from './components/OrderPanel/BookingDatesForm/BookingDatesForm.example';
 import * as BookingTimeForm from './components/OrderPanel/BookingTimeForm/BookingTimeForm.example';
+import * as BookingFixedDurationForm from './components/OrderPanel/BookingFixedDurationForm/BookingFixedDurationForm.example';
 import * as ProductOrderForm from './components/OrderPanel/ProductOrderForm/ProductOrderForm.example';
 import * as FieldDateAndTimeInput from './components/OrderPanel/BookingTimeForm/FieldDateAndTimeInput.example';
 import * as OrderPanel from './components/OrderPanel/OrderPanel.example';
@@ -136,6 +139,7 @@ export {
   BookingDateRangeFilter,
   BookingDatesForm,
   BookingTimeForm,
+  BookingFixedDurationForm,
   ProductOrderForm,
   Button,
   Colors,
@@ -176,6 +180,7 @@ export {
   FilterPopup,
   IconAdd,
   IconAlert,
+  IconArrowHead,
   IconBannedUser,
   IconCheckmark,
   IconClose,
@@ -196,6 +201,7 @@ export {
   IconSocialMediaTwitter,
   IconSpinner,
   IconSuccess,
+  IconSynchronize,
   InboxPage,
   ImageCarousel,
   KeywordFilter,

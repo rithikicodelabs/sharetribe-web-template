@@ -12,7 +12,7 @@ import {
   dispatchedActions,
 } from '../../util/testHelpers';
 
-import { loadData, searchListingsRequest, searchListingsSuccess } from './SearchPage.duck';
+import { loadData } from './SearchPage.duck';
 import { addMarketplaceEntities } from '../../ducks/marketplaceData.duck';
 
 const { screen, userEvent, waitFor } = testingLibrary;
@@ -73,17 +73,12 @@ const categories = generateCategories([
   ['fish', [['freshwater', ['grayling', 'arctic-char', 'pike']], 'saltwater']],
   ['birds', ['parrot', 'macaw']],
 ]);
-//console.log(JSON.stringify(categories, null, 2));
 
 const listingFields = [
   {
     // Formerly used for category, but now there's dedicated category setup
     key: 'cat',
     scope: 'public',
-    listingTypeConfig: {
-      limitToListingTypeIds: true,
-      listingTypeIds: ['sell-bicycles'],
-    },
     categoryConfig: {
       limitToCategoryIds: true,
       categoryIds: ['cats'],
@@ -103,12 +98,29 @@ const listingFields = [
     },
   },
   {
-    key: 'singleSelectTest',
+    key: 'boat ',
     scope: 'public',
     listingTypeConfig: {
       limitToListingTypeIds: true,
       listingTypeIds: ['sell-bicycles'],
     },
+    schemaType: 'enum',
+    enumOptions: [{ option: 'boat_1', label: 'Boat 1' }, { option: 'boat_2', label: 'Boat 2' }],
+    filterConfig: {
+      indexForSearch: true,
+      label: 'Boat',
+      group: 'primary',
+    },
+    showConfig: {
+      label: 'Boat',
+    },
+    saveConfig: {
+      label: 'Boat',
+    },
+  },
+  {
+    key: 'singleSelectTest',
+    scope: 'public',
     schemaType: 'enum',
     enumOptions: [{ option: 'enum1', label: 'Enum 1' }, { option: 'enum2', label: 'Enum 2' }],
     filterConfig: {
@@ -127,10 +139,6 @@ const listingFields = [
   {
     key: 'amenities',
     scope: 'public',
-    listingTypeConfig: {
-      limitToListingTypeIds: true,
-      listingTypeIds: ['rent-bicycles-daily', 'rent-bicycles-nightly', 'rent-bicycles-hourly'],
-    },
     schemaType: 'multi-enum',
     enumOptions: [{ option: 'dog_1', label: 'Dog 1' }, { option: 'dog_2', label: 'Dog 2' }],
     filterConfig: {
@@ -148,6 +156,8 @@ const listingFields = [
   },
 ];
 
+const listingTypeOptions = listingTypes.map(lt => ({ option: lt.id, label: labelize(lt.id) }));
+
 const defaultFiltersConfig = [
   {
     key: 'categoryLevel',
@@ -155,6 +165,12 @@ const defaultFiltersConfig = [
     scope: 'public',
     isNestedEnum: true,
     nestedParams: ['categoryLevel1', 'categoryLevel2', 'categoryLevel3'],
+  },
+  {
+    key: 'listingType',
+    schemaType: 'listingType',
+    scope: 'public',
+    options: listingTypeOptions,
   },
   {
     key: 'price',
@@ -265,10 +281,13 @@ const getSearchParams = config => {
       'publicData.listingType',
       'publicData.transactionProcessAlias',
       'publicData.unitType',
+      'publicData.cardStyle',
       // These help rendering of 'purchase' listings,
       // when transitioning from search page to listing page
       'publicData.pickupEnabled',
       'publicData.shippingEnabled',
+      'publicData.priceVariationsEnabled',
+      'publicData.priceVariants',
     ],
     'fields.user': ['profile.displayName', 'profile.abbreviatedName'],
     'fields.image': [
@@ -304,6 +323,7 @@ describe('SearchPage', () => {
         initialState,
         config,
         routeConfiguration,
+        messages: { 'FieldSelectTree.screenreader.option': 'Choose {optionName}.' },
       }
     );
 
@@ -324,6 +344,8 @@ describe('SearchPage', () => {
 
       // Has no Cat filter (primary filter tied to 'Cats' category)
       expect(queryByText('Cat')).not.toBeInTheDocument();
+      // Has no Boat filter (primary filter tied to 'sell-bicycles' listing type)
+      expect(queryByText('Boat')).not.toBeInTheDocument();
       // Has(!) Amenities filter (secondary filter)
       expect(getByText('Amenities')).toBeInTheDocument();
       // Has Single Select Test filter
@@ -340,6 +362,13 @@ describe('SearchPage', () => {
       expect(getByText('Fish')).toBeInTheDocument();
       expect(queryByText('Freshwater')).not.toBeInTheDocument();
 
+      // Has Listing type filter
+      expect(getByText('FilterComponent.listingTypeLabel')).toBeInTheDocument();
+      expect(getByText('Rent bicycles daily')).toBeInTheDocument();
+      expect(getByText('Rent bicycles nightly')).toBeInTheDocument();
+      expect(getByText('Rent bicycles hourly')).toBeInTheDocument();
+      expect(getByText('Sell bicycles')).toBeInTheDocument();
+
       // Has Price filter
       expect(getByText('FilterComponent.priceLabel')).toBeInTheDocument();
 
@@ -349,12 +378,12 @@ describe('SearchPage', () => {
       // Has listing with title
       expect(getByText('l2 title')).toBeInTheDocument();
       // 2 listings with the same price
-      expect(getAllByText('$55.00')).toHaveLength(2);
+      expect(getAllByText('ListingCard.price')).toHaveLength(2);
     });
 
     // Test category intercation: click "Fish"
     await waitFor(() => {
-      userEvent.click(getByRole('button', { name: 'Fish' }));
+      userEvent.click(getByRole('button', { name: 'Choose Fish.' }));
     });
 
     expect(getByText('Dogs')).toBeInTheDocument();
@@ -375,14 +404,22 @@ describe('SearchPage', () => {
     const searchRouteConfig = routeConfiguration.find(conf => conf.name === 'SearchPage');
     const SearchPage = searchRouteConfig.component;
 
-    const { getByPlaceholderText, getByText, getAllByText, queryByText, getByRole } = render(
-      <SearchPage {...props} />,
-      {
-        initialState,
-        config,
-        routeConfiguration,
-      }
-    );
+    const {
+      getByPlaceholderText,
+      getByText,
+      getByLabelText,
+      getAllByText,
+      queryByText,
+      getByRole,
+    } = render(<SearchPage {...props} />, {
+      initialState,
+      config,
+      routeConfiguration,
+      messages: {
+        'SearchPage.screenreader.openFilterButton': 'Filter: {label}',
+        'FieldSelectTree.screenreader.option': 'Choose {optionName}.',
+      },
+    });
 
     await waitFor(() => {
       // Has main search in Topbar and it's a location search.
@@ -409,10 +446,17 @@ describe('SearchPage', () => {
       expect(queryByText('Enum 2')).not.toBeInTheDocument();
 
       // Has Category filter
-      expect(getByText('FilterComponent.categoryLabel')).toBeInTheDocument();
+      expect(getByLabelText('Filter: FilterComponent.categoryLabel')).toBeInTheDocument();
       expect(queryByText('Dogs')).not.toBeInTheDocument();
       expect(queryByText('Cats')).not.toBeInTheDocument();
       expect(queryByText('Fish')).not.toBeInTheDocument();
+
+      // Has Listing type filter
+      expect(getByText('FilterComponent.listingTypeLabel')).toBeInTheDocument();
+      expect(queryByText('Rent bicycles daily')).not.toBeInTheDocument();
+      expect(queryByText('Rent bicycles nightly')).not.toBeInTheDocument();
+      expect(queryByText('Rent bicycles hourly')).not.toBeInTheDocument();
+      expect(queryByText('Sell bicycles')).not.toBeInTheDocument();
 
       // Has "more filters" button for secondary filters
       expect(getByText('SearchFiltersPrimary.moreFiltersButton')).toBeInTheDocument();
@@ -426,12 +470,12 @@ describe('SearchPage', () => {
       // Has listing with title
       expect(getByText('l2 title')).toBeInTheDocument();
       // 2 listings with the same price
-      expect(getAllByText('$55.00')).toHaveLength(2);
+      expect(getAllByText('ListingCard.price')).toHaveLength(2);
     });
 
     // Test category intercation
     await waitFor(() => {
-      userEvent.click(getByRole('button', { name: 'FilterComponent.categoryLabel' }));
+      userEvent.click(getByRole('button', { name: 'Filter: FilterComponent.categoryLabel' }));
     });
     expect(getByText('Dogs')).toBeInTheDocument();
     expect(queryByText('Poodle')).not.toBeInTheDocument();
@@ -442,7 +486,7 @@ describe('SearchPage', () => {
 
     // Test category intercation: click "Fish"
     await waitFor(() => {
-      userEvent.click(getByRole('button', { name: 'Fish' }));
+      userEvent.click(getByRole('button', { name: 'Choose Fish.' }));
     });
     expect(getByText('Dogs')).toBeInTheDocument();
     expect(queryByText('Poodle')).not.toBeInTheDocument();
@@ -468,6 +512,9 @@ describe('SearchPage', () => {
         initialState,
         config,
         routeConfiguration,
+        messages: {
+          'FieldSelectTree.screenreader.option': 'Choose {optionName}.',
+        },
       }
     );
 
@@ -487,7 +534,7 @@ describe('SearchPage', () => {
 
     // Test category intercation: click "Fish"
     await waitFor(() => {
-      userEvent.click(getByRole('button', { name: 'Cats' }));
+      userEvent.click(getByRole('button', { name: 'Choose Cats.' }));
     });
 
     // Has no Cat filter (primary)
@@ -502,6 +549,76 @@ describe('SearchPage', () => {
     expect(getByText('Fish')).toBeInTheDocument();
     expect(queryByText('Freshwater')).not.toBeInTheDocument();
     expect(queryByText('Saltwater')).not.toBeInTheDocument();
+  });
+
+  it('Check that Boat filters is revealed in grid variant', async () => {
+    // Select correct SearchPage variant according to route configuration
+    const config = getConfig('grid');
+    const routeConfiguration = getRouteConfiguration(config.layout);
+    const props = { ...commonProps };
+    const searchRouteConfig = routeConfiguration.find(conf => conf.name === 'SearchPage');
+    const SearchPage = searchRouteConfig.component;
+
+    const { getByPlaceholderText, getByText, getAllByText, queryByText, getByRole } = render(
+      <SearchPage {...props} />,
+      {
+        initialState,
+        config,
+        routeConfiguration,
+        messages: {
+          'FieldSelectTree.screenreader.option': 'Choose {optionName}.',
+        },
+      }
+    );
+
+    await waitFor(() => {
+      // Has no Boat filter (primary)
+      expect(queryByText('Boat')).not.toBeInTheDocument();
+
+      // Has Listing type filter
+      expect(getByText('FilterComponent.listingTypeLabel')).toBeInTheDocument();
+      expect(getByText('Rent bicycles daily')).toBeInTheDocument();
+      expect(getByText('Rent bicycles nightly')).toBeInTheDocument();
+      expect(getByText('Rent bicycles hourly')).toBeInTheDocument();
+      expect(getByText('Sell bicycles')).toBeInTheDocument();
+    });
+
+    // Test category intercation: click "Sell bicycles"
+    await waitFor(() => {
+      userEvent.click(getByRole('button', { name: 'Choose Sell bicycles.' }));
+    });
+
+    // Has Boat filter filter (primary)
+    expect(getByText('Boat')).toBeInTheDocument();
+  });
+
+  it('Check that Listing type filter is not revealed when using a listing type path param', async () => {
+    // Select correct SearchPage variant according to route configuration
+    const config = getConfig('grid');
+    const routeConfiguration = getRouteConfiguration(config.layout);
+    const props = { ...commonProps, params: { listingType: 'sell-bicycles' } };
+    const searchRouteConfig = routeConfiguration.find(
+      conf => conf.name === 'SearchPageWithListingType'
+    );
+    const SearchPage = searchRouteConfig.component;
+
+    const { getByPlaceholderText, getByText, getAllByText, queryByText, getByRole } = render(
+      <SearchPage {...props} />,
+      {
+        initialState,
+        config,
+        routeConfiguration,
+      }
+    );
+
+    await waitFor(() => {
+      // Does not have Listing type filter
+      expect(queryByText('FilterComponent.listingTypeLabel')).not.toBeInTheDocument();
+      expect(queryByText('Rent bicycles daily')).not.toBeInTheDocument();
+      expect(queryByText('Rent bicycles nightly')).not.toBeInTheDocument();
+      expect(queryByText('Rent bicycles hourly')).not.toBeInTheDocument();
+      expect(queryByText('Sell bicycles')).not.toBeInTheDocument();
+    });
   });
 });
 
@@ -550,11 +667,19 @@ describe('Duck', () => {
     // loadData() function is called. If you make customizations to the loadData() logic,
     // update this test accordingly!
     return loadData(null, null, config)(dispatch, getState, sdk).then(data => {
-      expect(dispatchedActions(dispatch)).toEqual([
-        searchListingsRequest(searchParams),
-        addMarketplaceEntities(fakeResponse([l1, l2]), sanitizeConfig),
-        searchListingsSuccess(fakeResponse([l1, l2])),
-      ]);
+      const actions = dispatchedActions(dispatch);
+      expect(actions).toHaveLength(3);
+
+      // First action should be searchListings.pending
+      expect(actions[0].type).toBe('SearchPage/searchListings/pending');
+      expect(actions[0].meta.arg.searchParams).toEqual(searchParams);
+
+      // Second action should be addMarketplaceEntities
+      expect(actions[1]).toEqual(addMarketplaceEntities(fakeResponse([l1, l2]), sanitizeConfig));
+
+      // Third action should be searchListings.fulfilled
+      expect(actions[2].type).toBe('SearchPage/searchListings/fulfilled');
+      expect(actions[2].payload).toEqual(fakeResponse([l1, l2]));
     });
   });
 

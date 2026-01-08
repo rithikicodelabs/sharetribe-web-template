@@ -1,23 +1,24 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { compose } from 'redux';
 import { connect } from 'react-redux';
 import { withRouter } from 'react-router-dom';
 import classNames from 'classnames';
 
+import appSettings from '../../config/settings.js';
 import { useConfiguration } from '../../context/configurationContext';
 import { useRouteConfiguration } from '../../context/routeConfigurationContext';
 import { FormattedMessage, useIntl } from '../../util/reactIntl';
 import { createResourceLocatorString, findRouteByRouteName } from '../../util/routes';
 import {
-  DATE_TYPE_DATE,
-  DATE_TYPE_DATETIME,
+  LINE_ITEM_OFFER,
+  LINE_ITEM_REQUEST,
   LISTING_UNIT_TYPES,
-  LINE_ITEM_HOUR,
-  LINE_ITEM_ITEM,
   propTypes,
 } from '../../util/types';
 import { timestampToDate } from '../../util/dates';
 import { createSlug } from '../../util/urlHelpers';
+import { requireListingImage } from '../../util/configHelpers';
+
 import {
   INQUIRY_PROCESS_NAME,
   TX_TRANSITION_ACTOR_CUSTOMER as CUSTOMER,
@@ -25,6 +26,8 @@ import {
   resolveLatestProcessName,
   getProcess,
   isBookingProcess,
+  NEGOTIATION_PROCESS_NAME,
+  OFFER,
 } from '../../transactions/transaction';
 
 import { getMarketplaceEntities } from '../../ducks/marketplaceData.duck';
@@ -47,9 +50,18 @@ import TopbarContainer from '../../containers/TopbarContainer/TopbarContainer';
 import FooterContainer from '../../containers/FooterContainer/FooterContainer';
 
 import { getStateData } from './TransactionPage.stateData';
+import ActionButtons, {
+  ACTION_BUTTON_1_ID,
+  ACTION_BUTTON_2_ID,
+  ACTION_BUTTON_3_ID,
+} from './ActionButtons/ActionButtons';
+import RequestQuote from './RequestQuote/RequestQuote';
+import Offer from './Offer/Offer';
 import ActivityFeed from './ActivityFeed/ActivityFeed';
 import DisputeModal from './DisputeModal/DisputeModal';
 import ReviewModal from './ReviewModal/ReviewModal';
+import RequestChangesModal from './RequestChangesModal/RequestChangesModal';
+import MakeCounterOfferModal from './MakeCounterOfferModal/MakeCounterOfferModal';
 import TransactionPanel from './TransactionPanel/TransactionPanel';
 
 import {
@@ -61,7 +73,9 @@ import {
   fetchTransactionLineItems,
 } from './TransactionPage.duck';
 import css from './TransactionPage.module.css';
-import { hasPermissionToViewData } from '../../util/userHelpers.js';
+import { getCurrentUserTypeRoles, hasPermissionToViewData } from '../../util/userHelpers.js';
+
+const MAX_MOBILE_SCREEN_WIDTH = 1023;
 
 // Submit dispute and close the review modal
 const onDisputeOrder = (
@@ -79,6 +93,121 @@ const onDisputeOrder = (
     .catch(e => {
       // Do nothing.
     });
+};
+
+// Submit change request, make transition, and send message
+const onChangeRequest = (
+  currentTransactionId,
+  transitionName,
+  onTransition,
+  onSendMessage,
+  config,
+  setRequestChangesModalOpen,
+  setChangeRequestSubmitted
+) => values => {
+  const { changeRequestMessage } = values;
+
+  // First make the transition
+  onTransition(currentTransactionId, transitionName, {})
+    .then(r => {
+      // Then send the change request content as a message
+      return onSendMessage(currentTransactionId, changeRequestMessage, config);
+    })
+    .then(r => {
+      setRequestChangesModalOpen(false);
+      return setChangeRequestSubmitted(true);
+    })
+    .catch(e => {
+      // Do nothing, error will be handled by the form
+    });
+};
+
+// Submit counter offer, make transition, and send message
+const onMakeCounterOffer = (
+  currentTransactionId,
+  transitionName,
+  onTransition,
+  transactionRole,
+  currency,
+  setMakeCounterOfferModalOpen,
+  setCounterOfferSubmitted
+) => values => {
+  const { counterOffer } = values;
+
+  // First make the transition with the counter offer amount
+  const params = {
+    orderData: {
+      actor: transactionRole,
+      offerInSubunits: counterOffer.amount, // TODO: get the actual offer in subunits
+      currency,
+    },
+  };
+
+  onTransition(currentTransactionId, transitionName, params)
+    .then(r => {
+      setMakeCounterOfferModalOpen(false);
+      return setCounterOfferSubmitted(true);
+    })
+    .catch(e => {
+      // Do nothing, error will be handled by the form
+    });
+};
+
+/**
+ * Handle navigation to MakeOfferPage. Returns a function that can be used as a form submit handler.
+ * Note: this does not yet handle form values, it only navigates to the MakeOfferPage.
+ *
+ * @param {Object} parameters all the info needed to navigate to MakeOfferPage.
+ * @param {Object} parameters.getListing The getListing function from react-router.
+ * @param {Object} parameters.params The params object from react-router.
+ * @param {Object} parameters.history The history object from react-router.
+ * @param {Object} parameters.routes The routes object from react-router.
+ * @returns {Function} A function that navigates to MakeOfferPage.
+ */
+const handleNavigateToMakeOfferPage = parameters => () => {
+  const { listing, transaction, history, routes } = parameters;
+
+  history.push(
+    createResourceLocatorString(
+      'MakeOfferPage',
+      routes,
+      { id: listing.id.uuid, slug: createSlug(listing.attributes.title) },
+      { transactionId: transaction.id.uuid }
+    )
+  );
+};
+
+/**
+ * Returns an object with the following properties:
+ * - hasValidData: boolean
+ * - errorMessageId: string | null
+ *
+ * This is currently needed for validating offers data in the transaction page.
+ *
+ * @param {propTypes.transaction} transaction
+ * @param {Object} process
+ * @param {Object} [process.isValidNegotiationOffersArray]
+ * @param {Object} [process.isNegotiationState]
+ * @returns {Object} E.g. { hasValidData: true, errorMessageId: null }
+ */
+const getDataValidationResult = (transaction, process) => {
+  const { state, transitions = [], metadata = {} } = transaction?.attributes || {};
+  const offers = metadata?.offers || [];
+
+  const hasFn = (property, obj) => !!obj?.[property];
+  const isNegotiationState = hasFn('isNegotiationState', process)
+    ? process?.isNegotiationState(state)
+    : false;
+
+  // With negotiation process, we need to check if the offers array is valid against the transitions array.
+  // Note: negotiation state refers to the state where the user can make an offer.
+  return hasFn('isValidNegotiationOffersArray', process) && isNegotiationState
+    ? {
+        hasValidData: process?.isValidNegotiationOffersArray(transitions, offers),
+        errorMessageId:
+          'TransactionPage.default-negotiation.validation.pastNegotiationOffersInvalid',
+      }
+    : { hasValidData: true, errorMessageId: null };
 };
 
 /**
@@ -108,6 +237,7 @@ const onDisputeOrder = (
  * @param {string} props.transitionInProgress - The transition in progress
  * @param {propTypes.error} props.transitionError - The transition error
  * @param {Object<string, Object>} props.monthlyTimeSlots - The monthly time slots: { '2019-11': { timeSlots: [], fetchTimeSlotsInProgress: false, fetchTimeSlotsError: null } }
+ * @param {Object<string, Object>} props.timeSlotsForDate - The time slots for date. E.g. { '2019-11-01': { timeSlots: [], fetchedAt: 1572566400000, fetchTimeSlotsError: null, fetchTimeSlotsInProgress: false } }
  * @param {propTypes.error} props.fetchTimeSlotsError - The fetch time slots error
  * @param {Array<propTypes.lineItem>} props.lineItems - The line items
  * @param {propTypes.error} props.fetchLineItemsError - The fetch line items error
@@ -132,6 +262,15 @@ export const TransactionPageComponent = props => {
   const [disputeSubmitted, setDisputeSubmitted] = useState(false);
   const [isReviewModalOpen, setReviewModalOpen] = useState(false);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
+  const [isRequestChangesModalOpen, setRequestChangesModalOpen] = useState(false);
+  const [changeRequestSubmitted, setChangeRequestSubmitted] = useState(false);
+  const [isMakeCounterOfferModalOpen, setMakeCounterOfferModalOpen] = useState(false);
+  const [counterOfferSubmitted, setCounterOfferSubmitted] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const config = useConfiguration();
   const routeConfiguration = useRouteConfiguration();
@@ -162,15 +301,10 @@ export const TransactionPageComponent = props => {
     transitionInProgress,
     transitionError,
     onTransition,
-    monthlyTimeSlots,
-    onFetchTimeSlots,
     nextTransitions,
     callSetInitialValues,
     onInitializeCardPaymentData,
-    onFetchTransactionLineItems,
-    lineItems,
-    fetchLineItemsInProgress,
-    fetchLineItemsError,
+    ...restOfProps
   } = props;
 
   const { listing, provider, customer, booking } = transaction || {};
@@ -242,6 +376,7 @@ export const TransactionPageComponent = props => {
       bookingDates,
       bookingStartTime,
       bookingEndTime,
+      priceVariantName, // relevant for bookings
       quantity: quantityRaw,
       seats: seatsRaw,
       deliveryMethod,
@@ -264,6 +399,8 @@ export const TransactionPageComponent = props => {
         }
       : {};
 
+    // priceVariantName is relevant for bookings
+    const priceVariantNameMaybe = priceVariantName ? { priceVariantName } : {};
     const quantity = Number.parseInt(quantityRaw, 10);
     const quantityMaybe = Number.isInteger(quantity) ? { quantity } : {};
     const seats = Number.parseInt(seatsRaw, 10);
@@ -276,6 +413,7 @@ export const TransactionPageComponent = props => {
       transaction,
       orderData: {
         ...bookingMaybe,
+        ...priceVariantNameMaybe,
         ...quantityMaybe,
         ...seatsMaybe,
         ...deliveryMethodMaybe,
@@ -291,6 +429,18 @@ export const TransactionPageComponent = props => {
   // This is called from ActivityFeed and from action buttons
   const onOpenReviewModal = () => {
     setReviewModalOpen(true);
+  };
+
+  // Open change request modal
+  // This is called from ActivityFeed and from action buttons
+  const onOpenRequestChangesModal = () => {
+    setRequestChangesModalOpen(true);
+  };
+
+  // Open make counter offer modal
+  // This is called from action buttons
+  const onOpenMakeCounterOfferModal = () => {
+    setMakeCounterOfferModalOpen(true);
   };
 
   // Submit review and close the review modal
@@ -337,6 +487,11 @@ export const TransactionPageComponent = props => {
   const listingDeleted = listing?.attributes?.deleted;
   const listingTitle = listingDeleted ? deletedListingTitle : listing?.attributes?.title;
 
+  const isCustomerBanned = !!customer?.attributes?.banned;
+  const isCustomerDeleted = !!customer?.attributes?.deleted;
+  const isProviderBanned = !!provider?.attributes?.banned;
+  const isProviderDeleted = !!provider?.attributes?.deleted;
+
   // Redirect users with someone else's direct link to their own inbox/sales or inbox/orders page.
   const isDataAvailable =
     process &&
@@ -352,14 +507,32 @@ export const TransactionPageComponent = props => {
   const isOwnOrder =
     isDataAvailable && isCustomerRole && currentUser.id.uuid === customer?.id?.uuid;
 
+  const {
+    customer: isCustomerUserTypeRole,
+    provider: isProviderUserTypeRole,
+  } = getCurrentUserTypeRoles(config, currentUser);
+
+  const validListingTypes = config.listing.listingTypes;
+  const foundListingTypeConfig = validListingTypes.find(
+    conf => conf.listingType === listing?.attributes?.publicData?.listingType
+  );
+
+  const showListingImage = requireListingImage(foundListingTypeConfig);
+
   if (isDataAvailable && isProviderRole && !isOwnSale) {
+    // If the user's user type does not have a provider role set, redirect
+    // to 'orders' inbox tab. Otherwise, redirect to 'sales' tab.
+    const tab = !isProviderUserTypeRole ? 'orders' : 'sales';
     // eslint-disable-next-line no-console
     console.error('Tried to access a sale that was not owned by the current user');
-    return <NamedRedirect name="InboxPage" params={{ tab: 'sales' }} />;
+    return <NamedRedirect name="InboxPage" params={{ tab }} />;
   } else if (isDataAvailable && isCustomerRole && !isOwnOrder) {
+    // If the user's user type does not have a customer role set, redirect
+    // to 'sales' inbox tab. Otherwise, redirect to 'orders' tab.
+    const tab = !isCustomerUserTypeRole ? 'sales' : 'orders';
     // eslint-disable-next-line no-console
     console.error('Tried to access an order that was not owned by the current user');
-    return <NamedRedirect name="InboxPage" params={{ tab: 'orders' }} />;
+    return <NamedRedirect name="InboxPage" params={{ tab }} />;
   }
 
   const detailsClassName = classNames(css.tabContent, css.tabContentVisible);
@@ -396,6 +569,12 @@ export const TransactionPageComponent = props => {
   ) : (
     <UserDisplayName user={customer} intl={intl} />
   );
+  const onMakeOffer = handleNavigateToMakeOfferPage({
+    listing,
+    transaction,
+    history,
+    routes: routeConfiguration,
+  });
 
   const stateData = isDataAvailable
     ? getStateData(
@@ -409,6 +588,10 @@ export const TransactionPageComponent = props => {
           sendReviewError,
           onTransition,
           onOpenReviewModal,
+          onOpenRequestChangesModal,
+          onOpenMakeCounterOfferModal,
+          onCheckoutRedirect: handleSubmitOrderRequest,
+          onMakeOfferFromRequest: onMakeOffer,
           intl,
         },
         process
@@ -438,11 +621,10 @@ export const TransactionPageComponent = props => {
     : null;
 
   const timeZone = listing?.attributes?.availabilityPlan?.timezone;
-  const dateType = lineItemUnitType === LINE_ITEM_HOUR ? DATE_TYPE_DATETIME : DATE_TYPE_DATE;
 
   const hasViewingRights = currentUser && hasPermissionToViewData(currentUser);
 
-  const txBookingMaybe = booking?.id ? { booking, dateType, timeZone } : {};
+  const txBookingMaybe = booking?.id ? { booking, timeZone } : {};
   const orderBreakdownMaybe = hasLineItems
     ? {
         orderBreakdown: (
@@ -463,6 +645,21 @@ export const TransactionPageComponent = props => {
     isBookingProcess(stateData.processName) &&
     process?.hasPassedState(process?.states?.ACCEPTED, transaction);
 
+  const isNegotiationProcess = processName === NEGOTIATION_PROCESS_NAME;
+  const isRegularNegotiation =
+    isNegotiationProcess && transaction?.attributes?.protectedData?.unitType === OFFER;
+
+  const isCounterpartyInactive =
+    (isCustomerRole && (isProviderBanned || isProviderDeleted)) ||
+    (isProviderRole && (isCustomerBanned || isCustomerDeleted));
+
+  const hasMatchMedia = typeof window !== 'undefined' && window?.matchMedia;
+  const isMobile =
+    mounted && hasMatchMedia
+      ? window.matchMedia(`(max-width: ${MAX_MOBILE_SCREEN_WIDTH}px)`)?.matches
+      : true;
+
+  const actionButtonContainer = isMobile ? 'mobile' : 'desktop';
   // TransactionPanel is presentational component
   // that currently handles showing everything inside layout's main view area.
   const panel = isDataAvailable ? (
@@ -473,7 +670,7 @@ export const TransactionPageComponent = props => {
       listing={listing}
       customer={customer}
       provider={provider}
-      hasTransitions={txTransitions.length > 0}
+      transitions={txTransitions}
       protectedData={transaction?.attributes?.protectedData}
       messages={messages}
       initialMessageFailed={initialMessageFailed}
@@ -487,6 +684,22 @@ export const TransactionPageComponent = props => {
       transactionRole={transactionRole}
       showBookingLocation={showBookingLocation}
       hasViewingRights={hasViewingRights}
+      showListingImage={showListingImage}
+      actionButtons={containerId => (
+        <ActionButtons
+          containerId={containerId}
+          showButtons={stateData.showActionButtons}
+          primaryButtonProps={stateData?.primaryButtonProps}
+          secondaryButtonProps={stateData?.secondaryButtonProps}
+          tertiaryButtonProps={stateData?.tertiaryButtonProps}
+          isListingDeleted={listingDeleted}
+          isProvider={isProviderRole}
+          transitions={txTransitions}
+          {...getDataValidationResult(transaction, process)}
+          timeZone={listing?.attributes?.availabilityPlan?.timezone || 'Etc/UTC'}
+          isCounterpartyInactive={isCounterpartyInactive}
+        />
+      )}
       activityFeed={
         <ActivityFeed
           messages={messages}
@@ -502,12 +715,33 @@ export const TransactionPageComponent = props => {
           fetchMessagesInProgress={fetchMessagesInProgress}
         />
       }
+      requestQuote={
+        <RequestQuote
+          transaction={transaction}
+          isNegotiationProcess={isNegotiationProcess}
+          isCustomerBanned={isCustomerBanned}
+          transactionRole={transactionRole}
+          intl={intl}
+        />
+      }
+      offer={
+        <Offer
+          transaction={transaction}
+          isNegotiationProcess={isNegotiationProcess}
+          transactionRole={transactionRole}
+          isRegularNegotiation={isRegularNegotiation}
+          isProviderBanned={isProviderBanned}
+          intl={intl}
+        />
+      }
       isInquiryProcess={processName === INQUIRY_PROCESS_NAME}
       config={config}
       {...orderBreakdownMaybe}
       orderPanel={
         <OrderPanel
-          className={css.orderPanel}
+          className={classNames(css.orderPanel, {
+            [css.orderPanelNextToTitle]: stateData.showDetailCardHeadings,
+          })}
           titleClassName={css.orderTitle}
           listing={listing}
           isOwnListing={isOwnSale}
@@ -527,15 +761,10 @@ export const TransactionPageComponent = props => {
               )}
             </H4>
           }
-          author={provider}
-          onSubmit={handleSubmitOrderRequest}
+          author={listing.author}
+          onSubmit={isNegotiationProcess ? onMakeOffer : handleSubmitOrderRequest}
           onManageDisableScrolling={onManageDisableScrolling}
-          onFetchTimeSlots={onFetchTimeSlots}
-          monthlyTimeSlots={monthlyTimeSlots}
-          onFetchTransactionLineItems={onFetchTransactionLineItems}
-          lineItems={lineItems}
-          fetchLineItemsInProgress={fetchLineItemsInProgress}
-          fetchLineItemsError={fetchLineItemsError}
+          {...restOfProps}
           validListingTypes={config.listing.listingTypes}
           marketplaceCurrency={config.currency}
           dayCountAvailableForBooking={config.stripe.dayCountAvailableForBooking}
@@ -546,10 +775,40 @@ export const TransactionPageComponent = props => {
   ) : (
     loadingOrFailedFetching
   );
+  const marketplaceCurrency = config.currency;
+  const currency = transaction?.attributes?.payinTotal?.currency || marketplaceCurrency;
+  const currencyConfig = currency ? appSettings.getCurrencyFormatting(currency) : null;
+  const counterOffers = [
+    process?.transitions?.CUSTOMER_MAKE_COUNTER_OFFER,
+    process?.transitions?.PROVIDER_MAKE_COUNTER_OFFER,
+  ];
+  const negotiationOfferLineItem = transaction?.attributes?.lineItems?.find(item =>
+    [LINE_ITEM_REQUEST, LINE_ITEM_OFFER].includes(item.code)
+  );
+  const currentOffer = negotiationOfferLineItem?.unitPrice;
+  const showMakeCounterOfferModal =
+    currencyConfig &&
+    (process?.transitions?.CUSTOMER_MAKE_COUNTER_OFFER ||
+      process?.transitions?.PROVIDER_MAKE_COUNTER_OFFER);
+
+  const pageHeading = isDataAvailable
+    ? intl.formatMessage(
+        {
+          id: `TransactionPage.${processName}.${transactionRole}.${stateData.processState}.title`,
+        },
+        {
+          customerName: customer?.attributes.profile.displayName,
+          providerName: provider?.attributes.profile.displayName,
+        }
+      )
+    : null;
 
   return (
     <Page
-      title={intl.formatMessage({ id: 'TransactionPage.schemaTitle' }, { title: listingTitle })}
+      title={intl.formatMessage(
+        { id: 'TransactionPage.schemaTitle' },
+        { title: listingTitle, h1: pageHeading }
+      )}
       scrollingDisabled={scrollingDisabled}
     >
       <LayoutSingleColumn topbar={<TopbarContainer />} footer={<FooterContainer />}>
@@ -557,6 +816,7 @@ export const TransactionPageComponent = props => {
         <ReviewModal
           id="ReviewOrderModal"
           isOpen={isReviewModalOpen}
+          focusElementId={`${actionButtonContainer}_${ACTION_BUTTON_1_ID}`}
           onCloseModal={() => setReviewModalOpen(false)}
           onManageDisableScrolling={onManageDisableScrolling}
           onSubmitReview={onSubmitReview}
@@ -570,6 +830,7 @@ export const TransactionPageComponent = props => {
           <DisputeModal
             id="DisputeOrderModal"
             isOpen={isDisputeModalOpen}
+            focusElementId={`${actionButtonContainer}_disputeOrderButton`}
             onCloseModal={() => setDisputeModalOpen(false)}
             onManageDisableScrolling={onManageDisableScrolling}
             onDisputeOrder={onDisputeOrder(
@@ -581,6 +842,52 @@ export const TransactionPageComponent = props => {
             disputeSubmitted={disputeSubmitted}
             disputeInProgress={transitionInProgress === process.transitions.DISPUTE}
             disputeError={transitionError}
+          />
+        ) : null}
+        {process?.transitions?.REQUEST_CHANGES ? (
+          <RequestChangesModal
+            id="RequestChangesModal"
+            isOpen={isRequestChangesModalOpen}
+            focusElementId={`${actionButtonContainer}_${ACTION_BUTTON_2_ID}`}
+            onCloseModal={() => setRequestChangesModalOpen(false)}
+            onManageDisableScrolling={onManageDisableScrolling}
+            onChangeRequest={onChangeRequest(
+              transaction?.id,
+              process.transitions.REQUEST_CHANGES,
+              onTransition,
+              onSendMessage,
+              config,
+              setRequestChangesModalOpen,
+              setChangeRequestSubmitted
+            )}
+            changeRequestSubmitted={changeRequestSubmitted}
+            changeRequestInProgress={transitionInProgress === process.transitions.REQUEST_CHANGES}
+            changeRequestError={transitionError}
+          />
+        ) : null}
+        {showMakeCounterOfferModal ? (
+          <MakeCounterOfferModal
+            id="MakeCounterOfferModal"
+            isOpen={isMakeCounterOfferModalOpen}
+            onCloseModal={() => setMakeCounterOfferModalOpen(false)}
+            focusElementId={`${actionButtonContainer}_${ACTION_BUTTON_3_ID}`}
+            onManageDisableScrolling={onManageDisableScrolling}
+            onMakeCounterOffer={onMakeCounterOffer(
+              transaction?.id,
+              transactionRole === CUSTOMER
+                ? process?.transitions?.CUSTOMER_MAKE_COUNTER_OFFER
+                : process?.transitions?.PROVIDER_MAKE_COUNTER_OFFER,
+              onTransition,
+              transactionRole,
+              currency,
+              setMakeCounterOfferModalOpen,
+              setCounterOfferSubmitted
+            )}
+            currentOffer={currentOffer}
+            counterOfferSubmitted={counterOfferSubmitted}
+            counterOfferInProgress={counterOffers.includes(transitionInProgress)}
+            counterOfferError={transitionError}
+            currencyConfig={currencyConfig}
           />
         ) : null}
       </LayoutSingleColumn>
@@ -606,6 +913,7 @@ const mapStateToProps = state => {
     sendReviewInProgress,
     sendReviewError,
     monthlyTimeSlots,
+    timeSlotsForDate,
     processTransitions,
     lineItems,
     fetchLineItemsInProgress,
@@ -634,11 +942,12 @@ const mapStateToProps = state => {
     sendMessageError,
     sendReviewInProgress,
     sendReviewError,
-    monthlyTimeSlots,
     nextTransitions: processTransitions,
-    lineItems,
-    fetchLineItemsInProgress,
-    fetchLineItemsError,
+    monthlyTimeSlots, // for OrderPanel
+    timeSlotsForDate, // for OrderPanel
+    lineItems, // for OrderPanel
+    fetchLineItemsInProgress, // for OrderPanel
+    fetchLineItemsError, // for OrderPanel
   };
 };
 
@@ -655,9 +964,9 @@ const mapDispatchToProps = dispatch => {
     callSetInitialValues: (setInitialValues, values) => dispatch(setInitialValues(values)),
     onInitializeCardPaymentData: () => dispatch(initializeCardPaymentData()),
     onFetchTransactionLineItems: (orderData, listingId, isOwnListing) =>
-      dispatch(fetchTransactionLineItems(orderData, listingId, isOwnListing)),
-    onFetchTimeSlots: (listingId, start, end, timeZone) =>
-      dispatch(fetchTimeSlots(listingId, start, end, timeZone)),
+      dispatch(fetchTransactionLineItems(orderData, listingId, isOwnListing)), // for OrderPanel
+    onFetchTimeSlots: (listingId, start, end, timeZone, options) =>
+      dispatch(fetchTimeSlots(listingId, start, end, timeZone, options)), // for OrderPanel
   };
 };
 

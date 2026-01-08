@@ -1,12 +1,10 @@
 import React, { useEffect } from 'react';
-import { bool, func, shape, string } from 'prop-types';
-import { compose } from 'redux';
 import { Form as FinalForm } from 'react-final-form';
 import classNames from 'classnames';
 
 // Import configs and util modules
 import appSettings from '../../../../config/settings';
-import { intlShape, injectIntl, FormattedMessage, useIntl } from '../../../../util/reactIntl';
+import { FormattedMessage, useIntl } from '../../../../util/reactIntl';
 import { propTypes } from '../../../../util/types';
 import { displayDeliveryPickup, displayDeliveryShipping } from '../../../../util/configHelpers';
 import {
@@ -69,7 +67,7 @@ export const EditListingDeliveryForm = props => (
         invalid,
         listingTypeConfig,
         marketplaceCurrency,
-        hasStockInUse = true,
+        allowOrdersOfMultipleItems = false,
         saveActionMsg,
         updated,
         updateInProgress,
@@ -163,6 +161,7 @@ export const EditListingDeliveryForm = props => (
               validClassName={css.validLocation}
               autoFocus={autoFocus}
               name="location"
+              id={`${formId}.location`}
               label={intl.formatMessage({ id: 'EditListingDeliveryForm.address' })}
               placeholder={intl.formatMessage({
                 id: 'EditListingDeliveryForm.addressPlaceholder',
@@ -248,7 +247,7 @@ export const EditListingDeliveryForm = props => (
               key={shippingEnabled ? 'oneItemValidation' : 'noOneItemValidation'}
             />
 
-            {hasStockInUse ? (
+            {allowOrdersOfMultipleItems ? (
               <FieldCurrencyInput
                 id={
                   formId

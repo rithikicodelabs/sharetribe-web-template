@@ -1,4 +1,5 @@
 import React from 'react';
+import classNames from 'classnames';
 
 import { FormattedMessage } from '../../util/reactIntl';
 import { propTypes } from '../../util/types';
@@ -36,6 +37,7 @@ const DetailsSideCard = props => {
   const {
     listing,
     listingTitle,
+    priceVariantName,
     author,
     firstImage,
     layoutListingImageConfig,
@@ -43,6 +45,7 @@ const DetailsSideCard = props => {
     showPrice,
     processName,
     breakdown,
+    showListingImage,
     intl,
   } = props;
 
@@ -56,24 +59,28 @@ const DetailsSideCard = props => {
     : [];
 
   return (
-    <div className={css.detailsContainerDesktop}>
-      <AspectRatioWrapper
-        width={aspectWidth}
-        height={aspectHeight}
-        className={css.detailsAspectWrapper}
-      >
-        <ResponsiveImage
-          rootClassName={css.rootForImage}
-          alt={listingTitle}
-          image={firstImage}
-          variants={variants}
-        />
-      </AspectRatioWrapper>
+    <div className={css.detailsContainerDesktop} role="complementary">
+      {showListingImage && (
+        <AspectRatioWrapper
+          width={aspectWidth}
+          height={aspectHeight}
+          className={css.detailsAspectWrapper}
+        >
+          <ResponsiveImage
+            rootClassName={css.rootForImage}
+            alt={listingTitle}
+            image={firstImage}
+            variants={variants}
+          />
+        </AspectRatioWrapper>
+      )}
       <div className={css.listingDetailsWrapper}>
-        <div className={css.avatarWrapper}>
+        <div className={classNames(css.avatarWrapper, { [css.noListingImage]: !showListingImage })}>
           <AvatarMedium user={author} disableProfileLink />
         </div>
-        <div className={css.detailsHeadings}>
+        <div
+          className={classNames(css.detailsHeadings, { [css.noListingImage]: !showListingImage })}
+        >
           <H4 as="h2">
             <NamedLink
               name="ListingPage"
@@ -99,6 +106,12 @@ const DetailsSideCard = props => {
 
       {!!breakdown ? (
         <div className={css.orderBreakdownHeader}>
+          {priceVariantName ? (
+            <div className={css.bookingPriceVariant}>
+              <p>{priceVariantName}</p>
+            </div>
+          ) : null}
+
           <H6 as="h3" className={css.orderBreakdownTitle}>
             <FormattedMessage id={`CheckoutPage.${processName}.orderBreakdown`} />
           </H6>

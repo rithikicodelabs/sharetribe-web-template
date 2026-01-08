@@ -255,6 +255,9 @@ export const listingFields = [
  *                        considered per person (seat = 1).
  *                        Possible values: 'oneSeat' and 'multipleSeats'.
  *                        Default: 'oneSeat'.
+ * - priceVariations      This is relevant only to listings using default-booking process.
+ *   - enabled:             If set to true, price variations are enabled.
+ *                          Default: false.
  * - defaultListingFields These are tied to transaction processes. Different processes have different flags.
  *                        E.g. default-inquiry can toggle price and location to true/false value to indicate,
  *                        whether price (or location) tab should be shown. If defaultListingFields.price is not
@@ -267,22 +270,22 @@ export const listingFields = [
  */
 
 export const listingTypes = [
-  {
-    listingType: 'daily-booking',
-    label: 'Daily booking',
-    transactionType: {
-      process: 'default-booking',
-      alias: 'default-booking/release-1',
-      unitType: 'day',
-    },
-    availabilityType: 'oneSeat',
-    defaultListingFields: {
-      location: true,
-      payoutDetails: true,
-    },
-  },
-  // // Here are some examples for other listingTypes
+  // // Here are some examples of listingTypes
   // // TODO: SearchPage does not work well if both booking and product selling are used at the same time
+  // {
+  //   listingType: 'daily-booking',
+  //   label: 'Daily booking',
+  //   transactionType: {
+  //     process: 'default-booking',
+  //     alias: 'default-booking/release-1',
+  //     unitType: 'day',
+  //   },
+  //   availabilityType: 'oneSeat',
+  //   defaultListingFields: {
+  //     location: true,
+  //     payoutDetails: true,
+  //   },
+  // },
   // {
   //   listingType: 'nightly-booking',
   //   label: 'Nightly booking',

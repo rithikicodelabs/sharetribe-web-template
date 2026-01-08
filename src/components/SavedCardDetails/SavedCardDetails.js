@@ -18,6 +18,7 @@ import css from './SavedCardDetails.module.css';
 
 const DEFAULT_CARD = 'defaultCard';
 const REPLACE_CARD = 'replaceCard';
+const DELETE_CARD_BUTTON_ID = 'deleteCardButton';
 
 /**
  * A component that renders a saved card details.
@@ -41,6 +42,7 @@ const SavedCardDetails = props => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [active, setActive] = useState(DEFAULT_CARD);
+  const [hasBeenOpened, setHasBeenOpened] = useState(false);
   const intl = useIntl();
 
   const {
@@ -129,6 +131,9 @@ const SavedCardDetails = props => {
 
   const onToggleActive = isOpen => {
     setMenuOpen(isOpen);
+    if (!hasBeenOpened && !isOpen) {
+      setHasBeenOpened(true);
+    }
   };
 
   const handleDeleteCard = () => {
@@ -158,7 +163,11 @@ const SavedCardDetails = props => {
           </div>
         </MenuLabel>
 
-        <MenuContent rootClassName={css.menuContent}>
+        <MenuContent
+          rootClassName={classNames(css.menuContent, {
+            [css.menuContentTransition]: hasBeenOpened,
+          })}
+        >
           <MenuItem key="first item" className={css.menuItem}>
             <IconCheckmark
               className={active === DEFAULT_CARD ? css.iconCheckmark : css.iconCheckmarkHidden}
@@ -188,8 +197,12 @@ const SavedCardDetails = props => {
       {showExpired && !menuOpen ? expiredText : null}
 
       {onDeleteCard && active !== REPLACE_CARD ? (
-        <InlineTextButton onClick={handleDeleteCard} className={css.savedPaymentMethodDelete}>
-          <IconClose rootClassName={css.closeIcon} size="small" />
+        <InlineTextButton
+          id={DELETE_CARD_BUTTON_ID}
+          onClick={handleDeleteCard}
+          className={css.savedPaymentMethodDelete}
+        >
+          <IconClose rootClassName={css.closeIcon} size="small" ariaLabel={deletePaymentMethod} />
           {deletePaymentMethod}
         </InlineTextButton>
       ) : null}
@@ -204,18 +217,19 @@ const SavedCardDetails = props => {
           usePortal
           contentClassName={css.modalContent}
           onManageDisableScrolling={onManageDisableScrolling}
+          focusElementId={DELETE_CARD_BUTTON_ID}
         >
           <div>
             <div className={css.modalTitle}>{removeCardModalTitle}</div>
             <p className={css.modalMessage}>{removeCardModalContent}</p>
             <div className={css.modalButtonsWrapper}>
-              <div
+              <button
                 onClick={() => setIsModalOpen(false)}
                 className={css.cancelCardDelete}
                 tabIndex="0"
               >
                 {cancel}
-              </div>
+              </button>
               <Button onClick={onDeleteCard} inProgress={deletePaymentMethodInProgress}>
                 {removeCard}
               </Button>

@@ -3,15 +3,14 @@ import classNames from 'classnames';
 import debounce from 'lodash/debounce';
 
 import { useConfiguration } from '../../context/configurationContext';
-import { FormattedMessage } from '../../util/reactIntl';
+import { FormattedMessage, useIntl } from '../../util/reactIntl';
 
 import { IconSpinner } from '../../components';
 
-import IconHourGlass from './IconHourGlass';
+import IconLookingGlass from './IconLookingGlass';
 import IconCurrentLocation from './IconCurrentLocation';
 import * as geocoderMapbox from './GeocoderMapbox';
 import * as geocoderGoogleMaps from './GeocoderGoogleMaps';
-import * as geocoderGoogleMapsNew from './GeocoderGoogleMapsNew';
 
 import css from './LocationAutocompleteInput.module.css';
 
@@ -35,17 +34,7 @@ const getTouchCoordinates = nativeEvent => {
 // Get correct geocoding variant: geocoderGoogleMaps or geocoderMapbox
 const getGeocoderVariant = mapProvider => {
   const isGoogleMapsInUse = mapProvider === 'googleMaps';
-
-  // Determine if the new version of the Google Places API is enabled
-  const useNewGooglePlacesAPI =
-    typeof window !== 'undefined' &&
-    typeof window?.useNewGooglePlacesAPI !== 'undefined' &&
-    window?.useNewGooglePlacesAPI;
-  return isGoogleMapsInUse && useNewGooglePlacesAPI
-    ? geocoderGoogleMapsNew
-    : isGoogleMapsInUse
-    ? geocoderGoogleMaps
-    : geocoderMapbox;
+  return isGoogleMapsInUse ? geocoderGoogleMaps : geocoderMapbox;
 };
 
 // Renders the autocompletion prediction results in a list
@@ -53,6 +42,7 @@ const LocationPredictionsList = props => {
   const {
     rootClassName,
     className,
+    useDarkText,
     children,
     predictions,
     currentLocationId,
@@ -73,7 +63,10 @@ const LocationPredictionsList = props => {
 
     return (
       <li
-        className={isHighlighted ? css.highlighted : null}
+        className={classNames(
+          isHighlighted ? css.highlighted : null,
+          useDarkText ? css.listItemBlackText : css.listItemWhiteText
+        )}
         key={predictionId}
         onTouchStart={e => {
           e.preventDefault();
@@ -172,32 +165,6 @@ class LocationAutocompleteInputImplementation extends Component {
 
   componentDidMount() {
     this._isMounted = true;
-
-    // Check whether the new version of the Google Places API is in use.
-    // The useNewGooglePlacesAPI property indicates whether the updated
-    // Google Places API is available and being utilized. If the useNewGooglePlacesAPI
-    // property is undefined, it means we haven't determined the API version yet.
-    const googleMapsStatus = typeof window?.useNewGooglePlacesAPI !== 'undefined';
-    // Development against localhost:3000 aka Webpack Dev Server has a bit random loading order.
-    const hasGoogle = window?.google;
-
-    // If the map provider configured in the application is Google Maps and we
-    // haven't yet determined the API version, we make a test API call
-    // to Google Maps Places Autocomplete to check its behavior.
-    // The fetchAutocompleteSuggestions function is only supported by
-    // the newer version of Google Places API.
-    if (this.props.config.maps.mapProvider === 'googleMaps' && hasGoogle && !googleMapsStatus) {
-      window?.google.maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions({
-        input: 'test',
-      })
-        .then(response => {
-          // A response means that the new Places API is enabled
-          window.useNewGooglePlacesAPI = true;
-        })
-        .catch(e => {
-          window.useNewGooglePlacesAPI = false;
-        });
-    }
   }
 
   componentWillUnmount() {
@@ -370,6 +337,15 @@ class LocationAutocompleteInputImplementation extends Component {
     const predictions = this.currentPredictions();
     if (!selectedPlace) {
       if (predictions && predictions.length > 0) {
+        const geocoderVariant = getGeocoderVariant(this.props.config.maps.mapProvider);
+        if (
+          this.state.highlightedIndex === -1 &&
+          predictions.length === 1 &&
+          predictions[0].id === geocoderVariant.CURRENT_LOCATION_ID
+        ) {
+          // If the only prediction is the current location, do not select it automatically.
+          return;
+        }
         const index = this.state.highlightedIndex !== -1 ? this.state.highlightedIndex : 0;
         this.selectPrediction(predictions[index]);
       } else {
@@ -470,7 +446,9 @@ class LocationAutocompleteInputImplementation extends Component {
       autoFocus,
       rootClassName,
       className,
+      useDarkText,
       iconClassName,
+      CustomIcon,
       inputClassName,
       predictionsClassName,
       predictionsAttributionClassName,
@@ -481,12 +459,18 @@ class LocationAutocompleteInputImplementation extends Component {
       inputRef,
       disabled,
       config,
+      intl,
+      id,
+      submitButton: SubmitButton,
+      ariaLabel,
     } = this.props;
     const { name, onFocus } = input;
     const { search } = currentValue(this.props);
     const { touched, valid } = meta || {};
     const isValid = valid && touched;
     const predictions = this.currentPredictions();
+
+    const ariaLabelMaybe = ariaLabel ? { ['aria-label']: ariaLabel } : {};
 
     const handleOnFocus = e => {
       this.setState({ inputHasFocus: true });
@@ -526,8 +510,16 @@ class LocationAutocompleteInputImplementation extends Component {
         <div className={iconClass}>
           {this.state.fetchingPlaceDetails ? (
             <IconSpinner className={css.iconSpinner} />
+          ) : CustomIcon ? (
+            <CustomIcon />
+          ) : SubmitButton ? (
+            <SubmitButton />
           ) : (
-            <IconHourGlass />
+            <IconLookingGlass
+              ariaLabel={intl.formatMessage({
+                id: 'LocationAutocompleteInput.screenreader.search',
+              })}
+            />
           )}
         </div>
         <input
@@ -537,6 +529,7 @@ class LocationAutocompleteInputImplementation extends Component {
           autoFocus={autoFocus}
           placeholder={placeholder}
           name={name}
+          id={id}
           value={search}
           disabled={disabled || this.state.fetchingPlaceDetails}
           onFocus={handleOnFocus}
@@ -546,10 +539,12 @@ class LocationAutocompleteInputImplementation extends Component {
           {...refMaybe}
           title={search}
           data-testid="location-search"
+          {...ariaLabelMaybe}
         />
         {renderPredictions ? (
           <LocationPredictionsList
             rootClassName={predictionsClass}
+            useDarkText={useDarkText}
             predictions={predictions}
             currentLocationId={geocoderVariant.CURRENT_LOCATION_ID}
             isGoogleMapsInUse={config.maps.mapProvider === 'googleMaps'}
@@ -559,7 +554,10 @@ class LocationAutocompleteInputImplementation extends Component {
             onSelectMove={this.handlePredictionsSelectMove}
             onSelectEnd={this.handlePredictionsSelectEnd}
           >
-            <GeocoderAttribution className={predictionsAttributionClassName} />
+            <GeocoderAttribution
+              className={predictionsAttributionClassName}
+              useDarkText={useDarkText}
+            />
           </LocationPredictionsList>
         ) : null}
       </div>
@@ -617,12 +615,14 @@ class LocationAutocompleteInputImplementation extends Component {
  * @param {boolean} props.meta.valid
  * @param {boolean} props.meta.touched
  * @param {Function | RefHook} props.inputRef
+ * @param {ReactNode} props.CustomIcon override the default icon
  * @returns {JSX.Element} LocationAutocompleteInputImpl component
  */
 const LocationAutocompleteInputImpl = props => {
   const config = useConfiguration();
+  const intl = useIntl();
 
-  return <LocationAutocompleteInputImplementation config={config} {...props} />;
+  return <LocationAutocompleteInputImplementation config={config} intl={intl} {...props} />;
 };
 
 export default LocationAutocompleteInputImpl;

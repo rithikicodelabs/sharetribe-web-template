@@ -281,6 +281,8 @@ const EditListingDetailsPanel = props => {
     updateInProgress,
     errors,
     config,
+    updatePageTitle: UpdatePageTitle,
+    intl,
   } = props;
 
   const classes = classNames(rootClassName || css.root, className);
@@ -314,20 +316,28 @@ const EditListingDetailsPanel = props => {
     hasListingTypesSet && (!hasExistingListingType || hasValidExistingListingType);
   const isPublished = listing?.id && state !== LISTING_STATE_DRAFT;
 
+  const panelHeadingProps = isPublished
+    ? {
+        id: 'EditListingDetailsPanel.title',
+        values: { listingTitle: <ListingLink listing={listing} />, lineBreak: <br /> },
+        messageProps: { listingTitle: listing.attributes.title },
+      }
+    : {
+        id: 'EditListingDetailsPanel.createListingTitle',
+        values: { lineBreak: <br /> },
+        messageProps: {},
+      };
+
   return (
-    <div className={classes}>
-      <H3 as="h1">
-        {isPublished ? (
-          <FormattedMessage
-            id="EditListingDetailsPanel.title"
-            values={{ listingTitle: <ListingLink listing={listing} />, lineBreak: <br /> }}
-          />
-        ) : (
-          <FormattedMessage
-            id="EditListingDetailsPanel.createListingTitle"
-            values={{ lineBreak: <br /> }}
-          />
+    <main className={classes}>
+      <UpdatePageTitle
+        panelHeading={intl.formatMessage(
+          { id: panelHeadingProps.id },
+          { ...panelHeadingProps.messageProps }
         )}
+      />
+      <H3 as="h1">
+        <FormattedMessage id={panelHeadingProps.id} values={{ ...panelHeadingProps.values }} />
       </H3>
 
       {canShowEditListingDetailsForm ? (
@@ -408,7 +418,7 @@ const EditListingDetailsPanel = props => {
           invalidExistingListingType={!hasValidExistingListingType}
         />
       )}
-    </div>
+    </main>
   );
 };
 

@@ -36,7 +36,8 @@ const LayoutSideNavigation = props => {
     footer: footerContent,
     sideNav: sideNavContent,
     useAccountSettingsNav,
-    currentPage,
+    accountSettingsNavProps,
+    intl,
     ...rest
   } = props;
 
@@ -63,7 +64,12 @@ const LayoutSideNavigation = props => {
             <Main as="div" className={containerClasses}>
               <aside className={classNames(css.sideNav, sideNavClassName)}>
                 {useAccountSettingsNav ? (
-                  <LayoutWrapperAccountSettingsSideNav currentPage={currentPage} />
+                  <LayoutWrapperAccountSettingsSideNav
+                    accountSettingsNavProps={accountSettingsNavProps}
+                    ariaLabel={intl.formatMessage({
+                      id: 'LayoutSideNavigation.screenreader.accountNavigation',
+                    })}
+                  />
                 ) : null}
                 {sideNavContent}
               </aside>

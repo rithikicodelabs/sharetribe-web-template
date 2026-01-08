@@ -94,6 +94,15 @@
   @media (--viewportLarge) {
     margin-left: 0;
   }
+  &.noListingImage {
+    margin-top: 24px;
+    @media (--viewportMedium) {
+      margin-top: 32px;
+    }
+    @media (--viewportLarge) {
+      margin-top: 40px;
+    }
+  }
 }
 
 .avatarMobile {
@@ -153,6 +162,25 @@
     margin-top: 0;
     margin-bottom: 0;
   }
+}
+
+.bookingPriceVariant {
+  margin-bottom: 16px;
+}
+
+.bookingPriceVariantMobile {
+  margin-bottom: 12px;
+
+  @media (--viewportLarge) {
+    display: none;
+  }
+}
+
+.priceVariantNameMobile {
+  composes: p from global;
+  font-weight: var(--fontWeightBold);
+  padding: 0;
+  margin-bottom: 16px;
 }
 
 .priceBreakdownContainer {
@@ -215,7 +243,7 @@
   color: var(--colorFail);
 }
 .notFoundError {
-  color: var(--colorAttention);
+  color: var(--colorFail);
 }
 
 .speculateError {
@@ -263,6 +291,9 @@
   @media (--viewportLarge) {
     display: block;
     margin: 0;
+    &.noListingImage {
+      margin-top: 32px;
+    }
   }
 }
 

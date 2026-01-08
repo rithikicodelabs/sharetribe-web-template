@@ -11,6 +11,7 @@ import {
   initialValuesForUserFields,
   isUserAuthorized,
   pickUserFieldsData,
+  showCreateListingLinkForUser,
 } from '../../util/userHelpers';
 import { isScrollingDisabled } from '../../ducks/ui.duck';
 
@@ -84,6 +85,7 @@ export const ProfileSettingsPageComponent = props => {
   } = props;
 
   const { userFields, userTypes = [] } = config.user;
+  const publicUserFields = userFields.filter(uf => uf.scope === 'public');
 
   const handleSubmit = (values, userType) => {
     const { firstName, lastName, displayName, bio: rawBio, ...rest } = values;
@@ -103,12 +105,6 @@ export const ProfileSettingsPageComponent = props => {
       publicData: {
         ...pickUserFieldsData(rest, 'public', userType, userFields),
       },
-      protectedData: {
-        ...pickUserFieldsData(rest, 'protected', userType, userFields),
-      },
-      privateData: {
-        ...pickUserFieldsData(rest, 'private', userType, userFields),
-      },
     };
     const uploadedImage = props.image;
 
@@ -122,15 +118,7 @@ export const ProfileSettingsPageComponent = props => {
   };
 
   const user = ensureCurrentUser(currentUser);
-  const {
-    firstName,
-    lastName,
-    displayName,
-    bio,
-    publicData,
-    protectedData,
-    privateData,
-  } = user?.attributes.profile;
+  const { firstName, lastName, displayName, bio, publicData } = user?.attributes.profile;
   // I.e. the status is active, not pending-approval or banned
   const isUnauthorizedUser = currentUser && !isUserAuthorized(currentUser);
 
@@ -153,8 +141,6 @@ export const ProfileSettingsPageComponent = props => {
         bio,
         profileImage: user.profileImage,
         ...initialValuesForUserFields(publicData, 'public', userType, userFields),
-        ...initialValuesForUserFields(protectedData, 'protected', userType, userFields),
-        ...initialValuesForUserFields(privateData, 'private', userType, userFields),
       }}
       profileImage={profileImage}
       onImageUpload={e => onImageUploadHandler(e, onImageUpload)}
@@ -164,12 +150,14 @@ export const ProfileSettingsPageComponent = props => {
       updateProfileError={updateProfileError}
       onSubmit={values => handleSubmit(values, userType)}
       marketplaceName={config.marketplaceName}
-      userFields={userFields}
+      userFields={publicUserFields}
       userTypeConfig={userTypeConfig}
     />
   ) : null;
 
   const title = intl.formatMessage({ id: 'ProfileSettingsPage.title' });
+
+  const showManageListingsLink = showCreateListingLinkForUser(config, currentUser);
 
   return (
     <Page className={css.root} title={title} scrollingDisabled={scrollingDisabled}>
@@ -177,7 +165,10 @@ export const ProfileSettingsPageComponent = props => {
         topbar={
           <>
             <TopbarContainer />
-            <UserNav currentPage="ProfileSettingsPage" />
+            <UserNav
+              currentPage="ProfileSettingsPage"
+              showManageListingsLink={showManageListingsLink}
+            />
           </>
         }
         footer={<FooterContainer />}

@@ -18,6 +18,15 @@ import DateRangeController from '../DatePickers/DateRangeController';
 import css from './FieldDateRangeController.module.css';
 
 const handleChange = (parentOnChange, fieldOnChange) => value => {
+  // When clearing datepicker values, the value passed is null
+  if (!value) {
+    if (parentOnChange) {
+      parentOnChange(value);
+    }
+    fieldOnChange(value);
+    return;
+  }
+
   const [startDate, endDate] = value;
   // If "onChange" callback is passed through the props,
   // it can notify the parent when the content of the input has changed.
@@ -83,6 +92,7 @@ const FieldDateRangeControllerComponent = props => {
  * @param {boolean} [props.useMobileMargins] - Whether to use mobile margins
  * @param {Function} [props.isOutsideRange] - The function to check if a day is outside the range
  * @param {number} [props.firstDayOfWeek] - The first day of the week (0-6, default to value set in configuration)
+ * @param {boolean} [props.hasFocusOnMount] - Whether to focus the date range picker on mount
  * @returns {JSX.Element} FieldDateRangeController component
  */
 const FieldDateRangeController = props => {

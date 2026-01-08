@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { compose } from 'redux';
 import { connect } from 'react-redux';
 import { useHistory, useLocation } from 'react-router-dom';
+import classNames from 'classnames';
 
 // Contexts
 import { useConfiguration } from '../../context/configurationContext';
@@ -25,6 +26,7 @@ import {
   isForbiddenError,
 } from '../../util/errors.js';
 import { hasPermissionToViewData, isUserAuthorized } from '../../util/userHelpers.js';
+import { requireListingImage } from '../../util/configHelpers';
 import {
   ensureListing,
   ensureOwnListing,
@@ -33,7 +35,10 @@ import {
 } from '../../util/data';
 import { richText } from '../../util/richText';
 import {
+  OFFER,
+  REQUEST,
   isBookingProcess,
+  isNegotiationProcess,
   isPurchaseProcess,
   resolveLatestProcessName,
 } from '../../transactions/transaction';
@@ -46,6 +51,7 @@ import { initializeCardPaymentData } from '../../ducks/stripe.duck.js';
 // Shared components
 import {
   H4,
+  H3,
   Page,
   NamedLink,
   NamedRedirect,
@@ -72,6 +78,8 @@ import {
   listingImages,
   handleContactUser,
   handleSubmitInquiry,
+  handleNavigateToMakeOfferPage,
+  handleNavigateToRequestQuotePage,
   handleSubmit,
   priceForSchemaMaybe,
 } from './ListingPage.shared';
@@ -114,12 +122,6 @@ export const ListingPageComponent = props => {
     fetchReviewsError,
     sendInquiryInProgress,
     sendInquiryError,
-    monthlyTimeSlots,
-    onFetchTimeSlots,
-    onFetchTransactionLineItems,
-    lineItems,
-    fetchLineItemsInProgress,
-    fetchLineItemsError,
     history,
     callSetInitialValues,
     onSendInquiry,
@@ -127,6 +129,7 @@ export const ListingPageComponent = props => {
     config,
     routeConfiguration,
     showOwnListingsOnly,
+    ...restOfProps
   } = props;
 
   const listingConfig = config.listing;
@@ -210,15 +213,28 @@ export const ListingPageComponent = props => {
       <ErrorPage topbar={topbar} scrollingDisabled={scrollingDisabled} intl={intl} invalidListing />
     );
   }
+  const validListingTypes = listingConfig.listingTypes;
+  const foundListingTypeConfig = validListingTypes.find(conf => conf.listingType === listingType);
+  const showListingImage = requireListingImage(foundListingTypeConfig);
+
   const processName = resolveLatestProcessName(transactionProcessAlias.split('/')[0]);
   const isBooking = isBookingProcess(processName);
   const isPurchase = isPurchaseProcess(processName);
-  const processType = isBooking ? 'booking' : isPurchase ? 'purchase' : 'inquiry';
+  const isNegotiation = isNegotiationProcess(processName);
+  const processType = isBooking
+    ? 'booking'
+    : isPurchase
+    ? 'purchase'
+    : isNegotiation
+    ? 'negotiation'
+    : 'inquiry';
 
   const currentAuthor = authorAvailable ? currentListing.author : null;
   const ensuredAuthor = ensureUser(currentAuthor);
+  const authorNeedsPayoutDetails =
+    ['booking', 'purchase'].includes(processType) || (isNegotiation && unitType === OFFER);
   const noPayoutDetailsSetWithOwnListing =
-    isOwnListing && (processType !== 'inquiry' && !currentUser?.attributes?.stripeConnected);
+    isOwnListing && (authorNeedsPayoutDetails && !currentUser?.attributes?.stripeConnected);
   const payoutDetailsWarning = noPayoutDetailsSetWithOwnListing ? (
     <span className={css.payoutDetailsWarning}>
       <FormattedMessage id="ListingPage.payoutDetailsWarning" values={{ processType }} />
@@ -244,12 +260,23 @@ export const ListingPageComponent = props => {
     setInitialValues,
     setInquiryModalOpen,
   });
-  // Note: this is for inquiry state in booking and purchase processes. Inquiry process is handled through handleSubmit.
+  // Note: this is for inquire transition to inquiry state in booking, purchase and negotiation processes.
+  // Inquiry process is handled through handleSubmit.
   const onSubmitInquiry = handleSubmitInquiry({
     ...commonParams,
     getListing,
     onSendInquiry,
     setInquiryModalOpen,
+  });
+  // This is to navigate to MakeOfferPage when InvokeNegotiationForm is submitted
+  const onNavigateToMakeOfferPage = handleNavigateToMakeOfferPage({
+    ...commonParams,
+    getListing,
+  });
+  // This is to navigate to MakeOfferPage when InvokeNegotiationForm is submitted
+  const onNavigateToRequestQuotePage = handleNavigateToRequestQuotePage({
+    ...commonParams,
+    getListing,
   });
   const onSubmit = handleSubmit({
     ...commonParams,
@@ -263,6 +290,10 @@ export const ListingPageComponent = props => {
     const isCurrentlyClosed = currentListing.attributes.state === LISTING_STATE_CLOSED;
     if (isOwnListing || isCurrentlyClosed) {
       window.scrollTo(0, 0);
+    } else if (isNegotiation && unitType === REQUEST) {
+      onNavigateToMakeOfferPage(values);
+    } else if (isNegotiation && unitType === OFFER) {
+      onNavigateToRequestQuotePage(values);
     } else {
       onSubmit(values);
     }
@@ -291,6 +322,8 @@ export const ListingPageComponent = props => {
     : 'https://schema.org/OutOfStock';
 
   const availabilityMaybe = schemaAvailability ? { availability: schemaAvailability } : {};
+  const noIndexMaybe =
+    currentListing.attributes.state === LISTING_STATE_CLOSED ? { noIndex: true } : {};
 
   return (
     <Page
@@ -300,6 +333,7 @@ export const ListingPageComponent = props => {
       description={description}
       facebookImages={facebookImages}
       twitterImages={twitterImages}
+      {...noIndexMaybe}
       schema={{
         '@context': 'http://schema.org',
         '@type': 'Product',
@@ -340,14 +374,24 @@ export const ListingPageComponent = props => {
                 }}
               />
             ) : null}
-            <SectionGallery
-              listing={currentListing}
-              variantPrefix={config.layout.listingImage.variantPrefix}
-            />
-            <div className={css.mobileHeading}>
-              <H4 as="h1" className={css.orderPanelTitle}>
-                <FormattedMessage id="ListingPage.orderTitle" values={{ title: richTitle }} />
-              </H4>
+            {showListingImage && (
+              <SectionGallery
+                listing={currentListing}
+                variantPrefix={config.layout.listingImage.variantPrefix}
+              />
+            )}
+            <div
+              className={showListingImage ? css.mobileHeading : css.noListingImageHeadingProduct}
+            >
+              {showListingImage ? (
+                <H4 as="h1" className={css.orderPanelTitle}>
+                  <FormattedMessage id="ListingPage.orderTitle" values={{ title: richTitle }} />
+                </H4>
+              ) : (
+                <H3 as="h1" className={css.orderPanelTitle}>
+                  <FormattedMessage id="ListingPage.orderTitle" values={{ title: richTitle }} />
+                </H3>
+              )}
             </div>
             <SectionTextMaybe text={description} showAsIngress />
 
@@ -382,7 +426,9 @@ export const ListingPageComponent = props => {
           </div>
           <div className={css.orderColumnForProductLayout}>
             <OrderPanel
-              className={css.productOrderPanel}
+              className={classNames(css.productOrderPanel, {
+                [css.imagesEnabled]: showListingImage,
+              })}
               listing={currentListing}
               isOwnListing={isOwnListing}
               onSubmit={handleOrderSubmit}
@@ -406,16 +452,12 @@ export const ListingPageComponent = props => {
               author={ensuredAuthor}
               onManageDisableScrolling={onManageDisableScrolling}
               onContactUser={onContactUser}
-              monthlyTimeSlots={monthlyTimeSlots}
-              onFetchTimeSlots={onFetchTimeSlots}
-              onFetchTransactionLineItems={onFetchTransactionLineItems}
-              lineItems={lineItems}
-              fetchLineItemsInProgress={fetchLineItemsInProgress}
-              fetchLineItemsError={fetchLineItemsError}
+              {...restOfProps}
               validListingTypes={config.listing.listingTypes}
               marketplaceCurrency={config.currency}
               dayCountAvailableForBooking={config.stripe.dayCountAvailableForBooking}
               marketplaceName={config.marketplaceName}
+              showListingImage={showListingImage}
             />
           </div>
         </div>
@@ -445,6 +487,7 @@ export const ListingPageComponent = props => {
  * @param {Array<propTypes.review>} props.reviews - The reviews
  * @param {propTypes.error} props.fetchReviewsError - The fetch reviews error
  * @param {Object<string, Object>} props.monthlyTimeSlots - The monthly time slots. E.g. { '2019-11': { timeSlots: [], fetchTimeSlotsInProgress: false, fetchTimeSlotsError: null } }
+ * @param {Object<string, Object>} props.timeSlotsForDate - The time slots for date. E.g. { '2019-11-01': { timeSlots: [], fetchedAt: 1572566400000, fetchTimeSlotsError: null, fetchTimeSlotsInProgress: false } }
  * @param {boolean} props.sendInquiryInProgress - Whether the send inquiry is in progress
  * @param {propTypes.error} props.sendInquiryError - The send inquiry error
  * @param {Function} props.onSendInquiry - The on send inquiry function
@@ -522,6 +565,7 @@ const mapStateToProps = state => {
     reviews,
     fetchReviewsError,
     monthlyTimeSlots,
+    timeSlotsForDate,
     sendInquiryInProgress,
     sendInquiryError,
     lineItems,
@@ -553,10 +597,11 @@ const mapStateToProps = state => {
     showListingError,
     reviews,
     fetchReviewsError,
-    monthlyTimeSlots,
-    lineItems,
-    fetchLineItemsInProgress,
-    fetchLineItemsError,
+    monthlyTimeSlots, // for OrderPanel
+    timeSlotsForDate, // for OrderPanel
+    lineItems, // for OrderPanel
+    fetchLineItemsInProgress, // for OrderPanel
+    fetchLineItemsError, // for OrderPanel
     sendInquiryInProgress,
     sendInquiryError,
   };
@@ -567,11 +612,11 @@ const mapDispatchToProps = dispatch => ({
     dispatch(manageDisableScrolling(componentId, disableScrolling)),
   callSetInitialValues: (setInitialValues, values, saveToSessionStorage) =>
     dispatch(setInitialValues(values, saveToSessionStorage)),
-  onFetchTransactionLineItems: params => dispatch(fetchTransactionLineItems(params)),
+  onFetchTransactionLineItems: params => dispatch(fetchTransactionLineItems(params)), // for OrderPanel
   onSendInquiry: (listing, message) => dispatch(sendInquiry(listing, message)),
   onInitializeCardPaymentData: () => dispatch(initializeCardPaymentData()),
-  onFetchTimeSlots: (listingId, start, end, timeZone) =>
-    dispatch(fetchTimeSlots(listingId, start, end, timeZone)),
+  onFetchTimeSlots: (listingId, start, end, timeZone, options) =>
+    dispatch(fetchTimeSlots(listingId, start, end, timeZone, options)), // for OrderPanel
 });
 
 // Note: it is important that the withRouter HOC is **outside** the
